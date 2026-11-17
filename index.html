@@ -7,7 +7,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
-<title>Drive Telemetry Master (DTM) — v2.16</title>
+<title>Drive Telemetry Master (DTM) — v2.21</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -634,8 +634,10 @@ input:focus,select.formsel:focus,textarea:focus{border-color:var(--cyan);box-sha
     <div class="segtipo tri" id="trips-dirfilter"><button class="on" data-v="" onclick="setTripsDir('')">Tutti</button><button data-v="andata" onclick="setTripsDir('andata')">→ Andata</button><button data-v="ritorno" onclick="setTripsDir('ritorno')">← Ritorno</button></div>
     <div class="aggtotal">
       <div><div class="l">Viaggi nel periodo</div><div class="v" id="agg-tripsall-count">0</div></div>
+      <div style="text-align:center"><div class="l">Km totali</div><div class="v" id="agg-tripsall-km" style="color:var(--red)">0</div></div>
       <div style="text-align:right"><div class="l">Spesa totale</div><div class="v" id="agg-tripsall-cost" style="color:var(--cyan)">€ 0,00</div></div>
     </div>
+    <div class="chartcard" id="trips-all-chart" style="margin-bottom:14px"></div>
     <div class="list" id="trips-all-items"></div>
   </div>
 </div>
@@ -1016,7 +1018,7 @@ input:focus,select.formsel:focus,textarea:focus{border-color:var(--cyan);box-sha
     <div class="settingsrow" style="cursor:default"><span class="l">Preavviso scadenze (giorni)</span><input type="number" id="mw-days" min="0" max="365" inputmode="numeric" style="width:90px" onchange="setMaintWarn('days',this.value)"></div>
     <div class="settingsrow" style="cursor:default"><span class="l">Preavviso scadenze (km)</span><input type="number" id="mw-km" min="0" max="50000" step="100" inputmode="numeric" style="width:90px" onchange="setMaintWarn('km',this.value)"></div>
     <div class="settingsrow" id="bk-custom-row" style="display:none;cursor:default"><span class="l">Ogni quanti giorni</span><input type="number" id="bk-custom" min="1" max="365" inputmode="numeric" style="width:90px" onchange="setBackupCustom(this.value)"></div>
-    <div class="settingsrow" onclick="showToast('Drive Telemetry Master (DTM) — v2.16')"><span class="l">Informazioni app</span><span class="r">DTM v2.15 ›</span></div>
+    <div class="settingsrow" onclick="showToast('Drive Telemetry Master (DTM) — v2.21')"><span class="l">Informazioni app</span><span class="r">DTM v2.15 ›</span></div>
   </div>
 
   <div class="sectionhead"><h3>Gestione dati</h3></div>
@@ -1363,10 +1365,20 @@ function kmDelta(k){
   const prev = state.kmReadings.filter(x=>x.km<k.km).sort((a,b)=>b.km-a.km)[0];
   return prev ? '+'+numIt(k.km-prev.km) : '—';
 }
+function tripSpeed(t){ if(t.velocita>0) return t.velocita; if(t.durata>0 && t.km>0) return t.km/(t.durata/60); return 0; }
+function tripCostKm(t){ return t.km>0 && t.totalCost>0 ? t.totalCost/t.km : 0; }
+function costKmTxt(v){ return v.toFixed(3).replace('.',','); }
 const CMP = {
   trips:{edit:'editTrip', del:'removeTrip', sort:(a,b)=>String(b.date||'').localeCompare(String(a.date||'')) || (b.id-a.id),
-    cols:[{h:'Data',v:t=>shortDate(t.date)},{h:'↔',v:t=>dirArrow(tripDirOf(t))},{h:'Percorso',l:1,v:t=>t.route?esc(t.route):'—',ell:1},{h:'Km',v:t=>numIt(t.km)},{h:'Tempo',v:t=>fmtDurShort(t.durata)},{h:'€',v:t=>n2(t.totalCost)},{h:'l/100',v:t=>t.consumo>0?n1(t.consumo):'—'}],
-    detail:t=>{ const dna=dnaMeta(t.dna); const p=['stile '+dna.label.toLowerCase()]; if(t.pedaggio>0)p.push('pedaggio '+euro(t.pedaggio)); if(t.velocita>0)p.push(numIt(t.velocita)+' km/h medi'); if(t.durata>0)p.push('durata '+fmtDur(t.durata)); if(METEO_LABEL[t.meteo])p.push('meteo '+METEO_LABEL[t.meteo].toLowerCase()); return (t.route?'<b>'+esc(t.route)+'</b> · ':'')+p.join(' · ')+(t.note?'<br>'+esc(t.note):''); }},
+    cols:[{h:'Data',v:t=>shortDate(t.date)},{h:'↔',v:t=>dirArrow(tripDirOf(t))},{h:'Percorso',l:1,v:t=>t.route?esc(t.route):'—',ell:1},{h:'Km',v:t=>numIt(t.km)},{h:'Tempo',v:t=>fmtDurShort(t.durata)},{h:'km/h',v:t=>{const v=tripSpeed(t);return v>0?numIt(Math.round(v)):'—';}},{h:'€',v:t=>n2(t.totalCost)},{h:'€/km',v:t=>{const v=tripCostKm(t);return v>0?costKmTxt(v):'—';}},{h:'l/100',v:t=>t.consumo>0?n1(t.consumo):'—'},{h:'Pedag.',v:t=>t.pedaggio>0?n2(t.pedaggio):'—'},{h:'Stile',v:t=>dnaMeta(t.dna).label},{h:'Traff.',v:t=>t.traffico>0?t.traffico+'/5':'—'},{h:'Meteo',v:t=>METEO_LABEL[t.meteo]||'—'}],
+    detail:t=>{
+      const dna=dnaMeta(t.dna), dir=tripDirOf(t), L=[];
+      L.push((t.route?'<b>'+esc(t.route)+'</b>':'<b>Viaggio manuale</b>')+(dir?' · '+dir:'')+' · '+esc(t.dateDisp||t.date));
+      const a=[numIt(t.km)+' km']; if(t.durata>0)a.push(fmtDur(t.durata)); const sp=tripSpeed(t); if(sp>0)a.push(numIt(Math.round(sp))+' km/h medi'); L.push(a.join(' · '));
+      const c=[]; if(t.fuelCost>0)c.push('carburante '+euro(t.fuelCost)); if(t.pedaggio>0)c.push('pedaggio '+euro(t.pedaggio)); c.push('totale <b>'+euro(t.totalCost)+'</b>'); const ck=tripCostKm(t); if(ck>0)c.push(costKmTxt(ck)+' €/km'); L.push(c.join(' · '));
+      const d=['stile '+dna.label.toLowerCase()]; if(t.consumo>0)d.push(n1(t.consumo)+' l/100'); if(t.traffico>0)d.push('traffico '+t.traffico+'/5'); if(t.acLevel>0)d.push('A/C '+t.acLevel+'/3'); if(t.finestrini)d.push('finestrini aperti'); if(METEO_LABEL[t.meteo])d.push('meteo '+METEO_LABEL[t.meteo].toLowerCase()); if(t.temp)d.push(numIt(t.temp)+'°C'); L.push(d.join(' · '));
+      return L.join('<br>')+(t.note?'<br><i>'+esc(t.note)+'</i>':'');
+    }},
   fuels:{edit:'editFuel', del:'removeFuel', sort:(a,b)=>String(b.date||'').localeCompare(String(a.date||'')) || (b.id-a.id),
     cols:[{h:'Data',v:f=>shortDate(f.date)},{h:'€',v:f=>n2(f.spesa)},{h:'Litri',v:f=>n1(f.litri)},{h:'€/L',v:f=>f.prezzo.toFixed(3).replace('.',',')},{h:'Km',v:f=>f.km>0?numIt(f.km):'—'},{h:'Tratto',v:f=>{const k=kmTratto(f);return k>0?numIt(Math.round(k)):'—';}},{h:'Bordo',v:f=>f.consumoBordo>0?n1(f.consumoBordo):'—'},{h:'Scost.',v:f=>gapCell(f)},{h:'P',v:f=>f.pieno?'<span style="color:var(--green)">●</span>':''}],
     detail:f=>{ const c=costoKmTratto(f); const dg=fuelDiagnostics(f); return (f.pieno?'<b>Serbatoio pieno</b> · ':'')+f.litri.toFixed(3).replace('.',',')+' L a '+f.prezzo.toFixed(3).replace('.',',')+' €/L'+(c!==null?' · '+euro(c)+'/km del tratto':'')+(dg.length?'<br>'+dg.join('<br>'):''); }},
@@ -1463,11 +1475,42 @@ function readingsSorted(){
   return state.kmReadings.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.km-b.km);
 }
 /* km del periodo stimati per interpolazione tra TUTTE le letture (autolettura, rifornimento, qualsiasi) */
+/* Modello dei km totali (v2.17).
+   - La lettura vale a fine giornata: il tratto tra due letture va dal giorno dopo la prima fino al giorno
+     della seconda compreso, e i viaggi di quel giorno sono gia' dentro la lettura.
+   - Tra due letture: la differenza e' il totale del tratto. I viaggi restano nei loro giorni; i km restanti
+     (differenza meno viaggi) sono "altri km" distribuiti in parti uguali sui giorni del tratto.
+   - Dopo l'ultima lettura: contano i viaggi registrati + una stima degli altri km (media giornaliera
+     dell'ultimo tratto) fino a ieri. Si corregge da sola alla lettura successiva.
+   - Se i viaggi superano la differenza tra le letture, vale il contachilometri (viaggi riproporzionati). */
+function kmModel(range){
+  const rd0 = readingsSorted();
+  if(rd0.length < 2) return null;
+  const rd = [];
+  rd0.forEach(r=>{ if(rd.length && rd[rd.length-1].date === r.date) rd[rd.length-1] = r; else rd.push(r); });
+  const DAY = 86400000, T = d=>Date.parse(d+'T00:00:00'), iso = ms=>isoLocal(new Date(ms));
+  const a = T(range.start), b = T(range.end) + DAY;
+  const tripKm = (d0, d1)=> state.trips.filter(t=>t.date >= d0 && t.date < d1).reduce((x,t)=>x+t.km, 0);
+  let total = 0, rate = 0;
+  for(let i=0;i<rd.length-1;i++){
+    const tA = T(rd[i].date), tB = T(rd[i+1].date);
+    const nd = Math.round((tB-tA)/DAY), D = Math.max(0, rd[i+1].km - rd[i].km);
+    const W = tripKm(iso(tA + DAY), iso(tB + DAY));
+    const other = Math.max(0, D - W) / nd, scale = (W > D && W > 0) ? D / W : 1;
+    if(i === rd.length-2) rate = other;
+    const oa = Math.max(tA + DAY, a), ob = Math.min(tB + DAY, b);
+    if(ob > oa) total += tripKm(iso(oa), iso(ob)) * scale + other * Math.round((ob-oa)/DAY);
+  }
+  const L = rd[rd.length-1], tL = T(L.date), tToday = T(isoLocal(new Date()));
+  const ts = Math.max(tL + DAY, a), tripsTail = state.trips.filter(t=>t.date >= iso(ts) && t.date <= range.end).reduce((x,t)=>x+t.km, 0);
+  const tailDays = Math.max(0, Math.round((Math.min(b, tToday) - ts) / DAY));
+  const tailEst = rate * tailDays;
+  total += tripsTail + tailEst;
+  return {total: total, tailEst: tailEst, tailDays: tailDays, rate: rate, lastDate: L.date, lastKm: L.km};
+}
 function kmInterp(range){
-  const rd = readingsSorted();
-  if(rd.length < 2) return null;
-  const a = Date.parse(range.start+'T00:00:00'), b = Date.parse(range.end+'T00:00:00') + 86400000;
-  return Math.max(0, odoAt(rd,b) - odoAt(rd,a));
+  const m = kmModel(range);
+  return m ? m.total : null;
 }
 /* spesa di carburante di competenza del periodo: la spesa fatta a inizio tratto copre i km di quel tratto */
 function fuelCostInRange(range){
@@ -1519,6 +1562,8 @@ function chartLavoro(range){
   const tile = (v, l, c) => '<div style="flex:1;min-width:0;background:#0b0e12;border:1px solid var(--line);border-radius:12px;padding:9px 6px;text-align:center"><div style="font-family:var(--font-display);font-weight:800;font-size:16px;color:'+c+'">'+v+'</div><div style="font-size:9.5px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.4px">'+l+'</div></div>';
   let html = '<div style="display:flex;gap:6px;margin-bottom:10px">'+
     tile(numIt(Math.round(s.total)), 'Km totali', '#fff')+tile(numIt(Math.round(s.work)), 'Lavoro', 'var(--red)')+tile(numIt(Math.round(s.other)), 'Altri km', 'var(--cyan)')+tile(s.pct!==null ? Math.round(s.pct)+'%' : '—', 'Quota lavoro', 'var(--amber)')+'</div>';
+  const km_m = kmModel(range);
+  if(km_m && km_m.tailEst >= 1) html += '<div class="hint" style="margin:0 0 10px">Nei km totali c\'è una stima di '+numIt(Math.round(km_m.tailEst))+' km dall\'ultima lettura ('+ddmm(km_m.lastDate)+'): '+km_m.tailDays+' giorni a circa '+n1(km_m.rate)+' km/giorno di altri km. Si corregge con la prossima lettura.</div>';
   if(s.over) html += '<div class="grouphint" style="border-color:var(--amber);color:var(--amber);margin-bottom:10px">I km dei viaggi registrati ('+numIt(Math.round(s.work))+') superano i km tra le letture ('+numIt(Math.round(s.total))+'): controlla le letture o i viaggi.</div>';
   const p = [];
   p.push(s.n+(s.n===1 ? ' viaggio' : ' viaggi')+' al lavoro');
@@ -1542,11 +1587,12 @@ function chartLavoro(range){
   const wk = [], ot = [];
   months.forEach(m=>{
     const a = Date.parse(isoLocal(m)+'T00:00:00'), b = Date.parse(isoLocal(new Date(m.getFullYear(), m.getMonth()+1, 1))+'T00:00:00');
-    const total = Math.max(0, odoAt(rd,b) - odoAt(rd,a));
+    const mm = kmModel({start: isoLocal(m), end: isoLocal(new Date(m.getFullYear(), m.getMonth()+1, 0))});
+    const total = mm ? mm.total : 0;
     const wm = state.trips.filter(t=>{ const d = Date.parse(t.date+'T00:00:00'); return d>=a && d<b; }).reduce((x,t)=>x+t.km,0);
     wk.push(Math.min(wm, Math.max(total, wm))); ot.push(Math.max(0, total-wm));
   });
-  if(months.length) html += stackChart(labels, wk, ot)+'<div class="hint" style="margin:2px 0 0">Km totali stimati per interpolazione tra le letture; "altri km" = totali meno viaggi registrati (tempo libero, weekend…).</div>';
+  if(months.length) html += stackChart(labels, wk, ot)+'<div class="hint" style="margin:2px 0 0">Km totali = differenza tra le letture, con i viaggi nei loro giorni; "altri km" = il resto, distribuito sui giorni (tempo libero, weekend…). Dopo l\'ultima lettura è una stima.</div>';
   return html;
 }
 
@@ -1705,6 +1751,9 @@ function tripRow(t){
   const dna = dnaMeta(t.dna);
   const label = t.route ? esc(t.route) : 'Viaggio manuale';
   const extra = [];
+  const spd = tripSpeed(t), ckm = tripCostKm(t);
+  if(spd>0) extra.push(numIt(Math.round(spd))+' km/h');
+  if(ckm>0) extra.push(costKmTxt(ckm)+' €/km');
   if(t.consumo>0) extra.push(numIt(t.consumo)+' l/100');
   if(t.pedaggio>0) extra.push('pedaggio '+euro(t.pedaggio));
   const dir = tripDirOf(t);
@@ -1732,6 +1781,8 @@ function renderTrips(){
   const taAgg = state.trips.filter(t=>inListRange('tripsall', t.date) && inTripsDir(t));
   document.getElementById('agg-tripsall-count').textContent = taAgg.length;
   document.getElementById('agg-tripsall-cost').textContent = euro(taAgg.reduce((s,t)=>s+t.totalCost,0));
+  document.getElementById('agg-tripsall-km').innerHTML = numIt(Math.round(taAgg.reduce((s,t)=>s+(t.km||0),0)*10)/10)+'<small style="font-size:11px;color:var(--muted);margin-left:3px">km</small>';
+  renderTripsChart();
 }
 let editingTripId = null;
 function removeTrip(id){
@@ -3052,6 +3103,98 @@ function lineChart(labels, series){
   const legend = '<div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:10.5px;color:var(--muted);margin-top:4px">'+series.map(s=>'<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+s.color+';margin-right:5px"></span>'+s.name+'</span>').join('')+'</div>';
   return svgWrap(g, H)+legend;
 }
+let tripsChartOptsOpen = false;
+function toggleTripsChartOpts(){ tripsChartOptsOpen = !tripsChartOptsOpen; renderTripsChart(); }
+function setTripsChartMode(m){ state.settings.tripsChartMode = (m === 'dir' ? 'dir' : 'day'); saveSettings(); renderTripsChart(); }
+function renderTripsChart(){
+  const chEl = document.getElementById('trips-all-chart');
+  if(!chEl) return;
+  const list = state.trips.filter(t=>inListRange('tripsall', t.date) && inTripsDir(t));
+  if(!list.length){ chEl.classList.remove('on'); chEl.innerHTML = ''; return; }
+  const mode = state.settings.tripsChartMode === 'dir' ? 'dir' : 'day';
+  const title = mode === 'dir' ? 'Consumo e temperatura: andata e ritorno' : 'Consumo medio e temperatura per giorno';
+  chEl.classList.add('on');
+  chEl.innerHTML = '<div class="l"><span>'+title+'</span><button type="button" onclick="toggleTripsChartOpts()" aria-label="Opzioni grafico" style="background:none;border:0;color:'+(tripsChartOptsOpen ? 'var(--cyan)' : 'var(--muted)')+';font-size:16px;line-height:1;cursor:pointer;padding:0 2px">⚙</button></div>'
+    + (tripsChartOptsOpen ? '<div class="segtipo" style="margin:2px 0 10px"><button type="button" class="'+(mode === 'day' ? 'on' : '')+'" onclick="setTripsChartMode(\'day\')" style="padding:8px 6px;font-size:12px">Media giornaliera</button><button type="button" class="'+(mode === 'dir' ? 'on' : '')+'" onclick="setTripsChartMode(\'dir\')" style="padding:8px 6px;font-size:12px">Andata / ritorno</button></div>' : '')
+    + tripsDayChart(list, mode);
+  const sc = chEl.querySelector('.cscroll'); if(sc) sc.scrollLeft = sc.scrollWidth;
+}
+function tripsDayChart(list, mode){
+  /* istogramma: consumo (media pesata sui km) + linea continua: temperatura.
+     mode 'day': una barra per giorno (media del giorno). mode 'dir': una barra per direzione (andata azzurro, ritorno ambra). */
+  let slots;
+  if(mode === 'dir'){
+    const present = {};
+    list.forEach(t=>{ present[tripDirOf(t)] = true; });
+    slots = [];
+    if(present.andata) slots.push({k:'andata', color:'var(--cyan)', label:'Andata'});
+    if(present.ritorno) slots.push({k:'ritorno', color:'var(--amber)', label:'Ritorno'});
+    if(present['']) slots.push({k:'', color:'#8791a0', label:'Senza direzione'});
+  } else slots = [{k:'*', color:'var(--cyan)', label:'Consumo medio (l/100 km)'}];
+  const S = slots.length, days = {};
+  list.forEach(t=>{
+    const si = slots.findIndex(x=>x.k === (mode === 'dir' ? tripDirOf(t) : '*'));
+    const d = days[t.date] || (days[t.date] = slots.map(()=>({cw:0, ck:0, ts:0, tn:0})));
+    const c = d[si];
+    if(t.consumo>0 && t.km>0){ c.cw += t.consumo*t.km; c.ck += t.km; }
+    if(t.temp){ c.ts += Number(t.temp); c.tn++; }
+  });
+  const keys = Object.keys(days).sort(), n = keys.length;
+  const cons = keys.map(k=>days[k].map(c=>c.ck>0 ? c.cw/c.ck : null));
+  const temp = keys.map(k=>days[k].map(c=>c.tn>0 ? c.ts/c.tn : null));
+  const cv = [].concat.apply([], cons).filter(v=>v!==null), tv = [].concat.apply([], temp).filter(v=>v!==null);
+  if(!cv.length && !tv.length) return chartEmpty('Nessun dato di consumo o temperatura nei viaggi del periodo.');
+  const W = Math.max(320, n*S*30+64), H = 190, L = 34, R = 34, T = 20, B = 28;
+  const nice = x => { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x/p; return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; };
+  const K = 4, stepC = nice(Math.max.apply(null, cv.concat([0.1])) * 1.1 / K), maxC = stepC * K;
+  const tmin = tv.length ? Math.min.apply(null, tv) : 0, tmax = tv.length ? Math.max.apply(null, tv) : 1, tr = tmax - tmin;
+  let tStep = nice(Math.max(tr*1.3, 4) / K), tLo = Math.floor((tmin - tr*0.1) / tStep) * tStep;
+  while(tLo + K*tStep < tmax + tr*0.05 + 0.01){ tStep = nice(tStep*1.01); tLo = Math.floor((tmin - tr*0.1) / tStep) * tStep; }
+  const tHi = tLo + K*tStep;
+  const gW = (W-L-R)/n, fill = S === 1 ? 0.62 : 0.84, sW = gW*fill/S, off = gW*(1-fill)/2;
+  const yt = v => T+(H-T-B)*(1-(v-tLo)/(tHi-tLo));
+  const xs = (i,j) => L+i*gW+off+sW*(j+0.5);
+  const dirMode = mode === 'dir', tColor = dirMode ? 'var(--text)' : 'var(--amber)';
+  let g = '';
+  for(let k=0;k<=K;k++){
+    const f = k/K, y = T+(H-T-B)*(1-f);
+    g += '<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-R)+'" y2="'+y.toFixed(1)+'" stroke="var(--muted)" opacity=".18"/>';
+    g += '<text x="'+(L-4)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--cyan)">'+(stepC*k).toFixed(stepC%1 ? 1 : 0).replace('.',',')+'</text>';
+    if(tv.length) g += '<text x="'+(W-R+4)+'" y="'+(y+3).toFixed(1)+'" text-anchor="start" font-size="8.5" fill="'+tColor+'">'+(tLo+tStep*k).toFixed(tStep%1 ? 1 : 0).replace('.',',')+'</text>';
+  }
+  g += '<text x="'+(L-4)+'" y="'+(T-8)+'" text-anchor="end" font-size="8" fill="var(--cyan)">l/100</text>';
+  if(tv.length) g += '<text x="'+(W-R+4)+'" y="'+(T-8)+'" text-anchor="start" font-size="8" fill="'+tColor+'">°C</text>';
+  const pts = [];
+  temp.forEach((row,i)=>row.forEach((v,j)=>{ if(v!==null) pts.push({x:xs(i,j), y:yt(v), v:v, c:slots[j].color}); }));
+  cons.forEach((row,i)=>row.forEach((v,j)=>{
+    if(v===null) return;
+    const h = (H-T-B)*(v/maxC), w = sW*(S === 1 ? 1 : 0.9), x = xs(i,j)-w/2, y = H-B-h;
+    g += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+Math.max(h,0).toFixed(1)+'" rx="2.5" fill="'+slots[j].color+'" opacity=".82"/>';
+    {
+      /* il valore sta alla base della barra; se lì c'è una temperatura vicina, va in cima alla barra */
+      const bx = xs(i,j), near = pts.filter(p=>Math.abs(p.x-bx) < 18);
+      const hit = (a,b) => near.some(p=>p.y-16 < b && p.y+4 > a);
+      let ly = y-3, inside = false;
+      if(h >= 16){ inside = true; ly = !hit(H-B-14, H-B-3) ? H-B-5 : (!hit(y+2, y+13) ? y+11 : H-B-5); }
+      g += '<text x="'+xs(i,j).toFixed(1)+'" y="'+ly.toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="'+(inside ? '#06141a' : slots[j].color)+'">'+v.toFixed(1).replace('.',',')+'</text>';
+    }
+  }));
+  if(pts.length) g += '<path d="'+pts.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ')+'" fill="none" stroke="'+tColor+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  pts.forEach(p=>{
+    g += dirMode ? '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3.2" fill="var(--text)" stroke="'+p.c+'" stroke-width="2"/>' : '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="2.6" fill="var(--amber)"/>';
+    {
+      const tx = '<text x="'+p.x.toFixed(1)+'" y="'+(p.y-7).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700"';
+      g += tx+' fill="none" stroke="#0b0e12" stroke-width="3" stroke-linejoin="round">'+Math.round(p.v)+'°</text>'+tx+' fill="'+tColor+'">'+Math.round(p.v)+'°</text>';
+    }
+  });
+  g += '<line x1="'+L+'" y1="'+(H-B)+'" x2="'+(W-R)+'" y2="'+(H-B)+'" stroke="var(--muted)" opacity=".4"/>';
+  keys.forEach((k,i)=>{ g += '<text x="'+(L+i*gW+gW/2).toFixed(1)+'" y="'+(H-B+13)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+ddmm(k)+'</text>'; });
+  const svg = '<svg viewBox="0 0 '+W+' '+H+'" width="'+(W>320 ? W : '100%')+'" style="display:block" role="img">'+g+'</svg>';
+  const sq = c => '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+c+';margin-right:5px"></span>';
+  const barLegend = dirMode ? slots.map(x=>'<span>'+sq(x.color)+x.label+'</span>').join('') : '<span>'+sq('var(--cyan)')+'Consumo medio (l/100 km)</span>';
+  const legend = '<div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:10.5px;color:var(--muted);margin-top:6px">'+barLegend+'<span><span style="display:inline-block;width:14px;height:3px;border-radius:2px;background:'+tColor+';margin-right:5px;vertical-align:middle"></span>Temperatura (°C)</span></div>';
+  return '<div class="cscroll" style="overflow-x:auto;-webkit-overflow-scrolling:touch">'+svg+'</div>'+legend;
+}
 function chartRangeFor(el){
   if(el.closest('#s-stats')) return listRanges.stats || dashRange;
   return dashRange;
@@ -3088,9 +3231,10 @@ function chartKm(range){
     const a = Date.parse(isoLocal(m)+'T00:00:00');
     const nx = new Date(m.getFullYear(), m.getMonth()+1, 1);
     const b = Date.parse(isoLocal(nx)+'T00:00:00');
-    return Math.max(0, odoAt(rd,b) - odoAt(rd,a));
+    const mm = kmModel({start: isoLocal(m), end: isoLocal(new Date(m.getFullYear(), m.getMonth()+1, 0))});
+    return mm ? mm.total : 0;
   });
-  return barChart(labels, values, 'var(--red)', v=>numIt(Math.round(v)))+'<div class="hint" style="margin:2px 0 0">Km stimati per interpolazione tra le letture del contachilometri.</div>';
+  return barChart(labels, values, 'var(--red)', v=>numIt(Math.round(v)))+'<div class="hint" style="margin:2px 0 0">Km per mese: letture del contachilometri + viaggi registrati; dopo l\'ultima lettura è una stima.</div>';
 }
 function refuelSeries(range){
   return state.fuels.filter(f=>f.date>=range.start && f.date<=range.end && kmTratto(f)>0).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
@@ -3788,7 +3932,7 @@ function goBackup(){
 function buildBackupPayload(){
   return {
     app: 'Drive Telemetry Master',
-    version: '2.16',
+    version: '2.21',
     exportedAt: new Date().toISOString(),
     settings: {
       backupIntervalDays: state.settings.backupIntervalDays,

@@ -1,5 +1,5 @@
 /* DTM service worker — cambia CACHE a ogni nuova versione dell'app */
-const CACHE = 'dtm-v2.16.2';
+const CACHE = 'dtm-v2.21.1';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
